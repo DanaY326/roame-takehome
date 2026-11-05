@@ -111,6 +111,9 @@ private struct SearchHeader: View {
     @Bindable var store: ExplorerStore
     @Binding var openSheet: FilterSheet?
     @FocusState private var focused: Field?
+    @State private var chipFrame: CGRect = .zero
+    @State private var chipViewportWidth: CGFloat = 0
+    private let chipScrollSpace = "chipScroll"
 
     private enum Field { case origin, destination }
 
@@ -136,7 +139,12 @@ private struct SearchHeader: View {
                         }
                     } label: {
                         FilterChip(title: state.filter.cabin ?? "Cabin", isActive: state.filter.cabin != nil)
+                            // Rebuild the label when the selection changes: otherwise Menu keeps
+                            // the previous label's frame and the chip's padding drifts.
+                            .id(state.filter.cabin)
                     }
+                    .fixedSize()
+                    .transaction { $0.animation = nil }
                     Button { openSheet = .points } label: {
                         FilterChip(title: store.activeLabel(.maxPoints) ?? "Points", isActive: state.filter.maxPoints != nil)
                     }
@@ -146,7 +154,11 @@ private struct SearchHeader: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 16)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(chipScrollSpace)) } action: { chipFrame = $0 }
             }
+            .coordinateSpace(name: chipScrollSpace)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { chipViewportWidth = $0 }
+            .mask(ScrollEdgeFade(leading: chipFrame.minX < -1, trailing: chipFrame.maxX > chipViewportWidth + 1))
             .padding(.horizontal, -16)
 
             HStack {
@@ -201,6 +213,29 @@ private struct SearchHeader: View {
         return state.hasActiveFilters
             ? "\(count) of \(Formatting.shared.groupedNumber(value: state.totalFlightCount))"
             : count
+    }
+}
+
+/// Mask that fades out a horizontal scroll view's edges when more content lies beyond them.
+private struct ScrollEdgeFade: View {
+    let leading: Bool
+    let trailing: Bool
+    private let width: CGFloat = 28
+
+    var body: some View {
+        HStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                .frame(width: width)
+                .opacity(leading ? 1 : 0)
+                .background(Color.black.opacity(leading ? 0 : 1))
+            Color.black
+            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: width)
+                .opacity(trailing ? 1 : 0)
+                .background(Color.black.opacity(trailing ? 0 : 1))
+        }
+        .animation(.easeOut(duration: 0.2), value: leading)
+        .animation(.easeOut(duration: 0.2), value: trailing)
     }
 }
 

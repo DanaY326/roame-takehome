@@ -9,7 +9,17 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.composed
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -334,8 +344,8 @@ private fun SearchHeader(
     onReset: () -> Unit,
 ) {
     val focus = LocalFocusManager.current
-    Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest, tonalElevation = 1.dp) {
+    Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Surface(modifier = Modifier.padding(horizontal = 16.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest, tonalElevation = 1.dp) {
             Column {
                 SearchField("From", "City or airport code", Icons.Filled.LocationOn, origin, onOriginChange)
                 HorizontalDivider(Modifier.padding(start = 52.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -343,7 +353,15 @@ private fun SearchHeader(
             }
         }
 
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val chipScroll = rememberScrollState()
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .scrollEdgeFade(chipScroll)
+                .horizontalScroll(chipScroll)
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             val dateLabel = state.activeFilters.firstOrNull { it.kind == FilterKind.DATES }?.label
             val fullRange = state.options.let { o ->
                 if (o.minDate != null && o.maxDate != null) FlightDates.formatRange(o.minDate!!, o.maxDate!!) else "Dates"
@@ -371,7 +389,7 @@ private fun SearchHeader(
             Chip(programsLabel ?: "Programs", programsLabel != null) { onOpenSheet(FilterSheetKind.PROGRAMS) }
         }
 
-        Row(Modifier.fillMaxWidth().height(32.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(32.dp), verticalAlignment = Alignment.CenterVertically) {
             val count = Formatting.flightCount(state.resultCount)
             Text(
                 if (state.hasActiveFilters) "$count of ${Formatting.groupedNumber(state.totalFlightCount)}" else count,
@@ -410,6 +428,32 @@ private fun SearchField(label: String, placeholder: String, icon: ImageVector, v
             unfocusedIndicatorColor = Color.Transparent,
         ),
     )
+}
+
+/** Fades out the edges of a horizontally scrolling row when more content lies beyond them. */
+private fun Modifier.scrollEdgeFade(state: ScrollState, fadeWidth: Dp = 28.dp): Modifier = composed {
+    val leading by animateFloatAsState(if (state.canScrollBackward) 1f else 0f, label = "leadingFade")
+    val trailing by animateFloatAsState(if (state.canScrollForward) 1f else 0f, label = "trailingFade")
+    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            val w = fadeWidth.toPx()
+            if (leading > 0f) {
+                drawRect(
+                    Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 1f - leading), Color.Black), startX = 0f, endX = w),
+                    size = size.copy(width = w),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+            if (trailing > 0f) {
+                drawRect(
+                    Brush.horizontalGradient(listOf(Color.Black, Color.Black.copy(alpha = 1f - trailing)), startX = size.width - w, endX = size.width),
+                    topLeft = Offset(size.width - w, 0f),
+                    size = size.copy(width = w),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+        }
 }
 
 @Composable
